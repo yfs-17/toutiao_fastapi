@@ -5,6 +5,34 @@ from sqlalchemy.sql.expression import update
 
 from models.news import Category,News
 
+
+# 将 Category ORM 对象转为可 JSON 序列化的 dict
+def serialize_category(category: Category) -> dict:
+    return {
+        "id": category.id,
+        "name": category.name,
+        "sort_order": category.sort_order,
+        "created_at": category.created_at.isoformat() if category.created_at else None,
+        "updated_at": category.updated_at.isoformat() if category.updated_at else None,
+    }
+
+
+# 将 News ORM 对象转为可 JSON 序列化的 dict
+def serialize_news(news: News) -> dict:
+    return {
+        "id": news.id,
+        "title": news.title,
+        "description": news.description,
+        "content": news.content,
+        "image": news.image,
+        "author": news.author,
+        "category_id": news.category_id,
+        "views": news.views,
+        "publish_time": news.publish_time.isoformat() if news.publish_time else None,
+        "created_at": news.created_at.isoformat() if news.created_at else None,
+        "updated_at": news.updated_at.isoformat() if news.updated_at else None,
+    }
+
 #获取分类名称
 async def get_categories(db: AsyncSession, skip: int = 0, limit: int = 100):
     stmt = select(Category).offset(skip).limit(limit)
@@ -53,7 +81,7 @@ async def get_related_news(db: AsyncSession, category_id: int, news_id: int,limi
         "content": news_detail.content,
         "image": news_detail.image,
         "author": news_detail.author,
-        "publishTime": news_detail.publish_time,
+        "publishTime": news_detail.publish_time.isoformat() if news_detail.publish_time else None,
         "categoryId": news_detail.category_id,
         "views": news_detail.views,
     } for news_detail in related_news]

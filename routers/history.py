@@ -8,6 +8,7 @@ from config.db_config import get_db
 from models.users import User
 from utils.auth import get_current_user
 from crud import history
+from cache import history_cache
 
 
 
@@ -26,6 +27,7 @@ async def add_history(
         result = await history.update_history_time(db,user.id,history_news.news_id)
     else:
         result = await history.add_history(db,user.id,history_news.news_id)
+    await history_cache.invalidate(user.id)
     return success_response("成功获取新闻记录",data=result)
 
 @router.get("/list")
@@ -35,6 +37,10 @@ page: int = Query(default=1,ge=1),
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
+    version = await history_cache.get_version(user.id)
+    cached = await history_cache.get_cache_list(user.id, version, page, page_size)
+    if cached is not None:
+        return success_response("获取历史浏览记录成功", data=cached)
     row, total = await history.get_history_list(db, user.id, page, page_size)
     history_list = [{
         **news.__dict__,
@@ -42,6 +48,7 @@ page: int = Query(default=1,ge=1),
     } for news, view_time in row]
     has_more = total > page * page_size
     data = HistoryListResponse(list=history_list, total=total, hasMore=has_more)
+    await history_cache.set_cache_list(user.id, version, page, page_size, data.model_dump(by_alias=True, mode="json"))
     return success_response("获取历史浏览记录成功",data=data)
 
 @router.delete("/delete/{history_id}")
@@ -53,6 +60,7 @@ async def delete_history(
     result = await history.delete_history(db,history_id,user.id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="删除失败")
+    await history_cache.invalidate(user.id)
     return success_response("删除浏览历史成功")
 
 @router.delete("/clear")
@@ -61,4 +69,5 @@ async def clear_history(
         user: User = Depends(get_current_user)
 ):
     result = await history.clear_history(db,user.id)
+    await history_cache.invalidate(user.id)
     return success_response(f"清空{result}历史记录成功")
