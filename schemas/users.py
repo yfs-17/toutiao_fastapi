@@ -3,9 +3,14 @@ from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 
-class UserRequest(BaseModel):
+class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, description="用户名")
+    password: str = Field(..., min_length=6, max_length=50, description="密码")
 
 class UserInfoBase(BaseModel):
      """

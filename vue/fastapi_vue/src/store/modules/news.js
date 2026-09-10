@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
-import { apiConfig } from '../../config/api'
+import request from '../../utils/request'
 
 export const useNewsStore = defineStore('news', {
   state: () => ({
@@ -23,7 +22,7 @@ export const useNewsStore = defineStore('news', {
       
       try {
         // 调用API获取分类列表
-        const response = await axios.get(`${apiConfig.baseURL}/api/news/categories`);
+        const response = await request.get(`/api/news/categories`);
         
         if (response.data && response.data.code === 200) {
           // 设置分类数据
@@ -101,7 +100,7 @@ export const useNewsStore = defineStore('news', {
         
  
         // 实际项目中连接后端API的代码，暂时注释掉
-        const response = await axios.get(`${apiConfig.baseURL}/api/news/list`, { params });
+        const response = await request.get(`/api/news/list`, { params });
         
         if (response.data && response.data.code === 200) {
           const newsData = response.data.data.list;
@@ -131,7 +130,7 @@ export const useNewsStore = defineStore('news', {
         
 
         // 实际项目中连接后端API的代码，取消注释即可使用
-        const response = await axios.get(`${apiConfig.baseURL}/api/news/detail?id=${id}`);
+        const response = await request.get(`/api/news/detail?id=${id}`);
         
         if (response.data && response.data.code === 200) {
           // 设置新闻详情数据

@@ -39,8 +39,6 @@ import { ref, computed, h, onMounted } from 'vue';
 import { useUserStore } from '../store/user';
 import { showDialog, showToast, showLoadingToast, showSuccessToast, showFailToast } from 'vant';
 import { useRouter } from 'vue-router';
-import axios from 'axios';
-import { apiConfig } from '../config/api';
 
 const router = useRouter();
 const userStore = useUserStore();

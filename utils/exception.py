@@ -1,5 +1,6 @@
 import traceback
 from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette import status
@@ -85,6 +86,56 @@ async def general_exception_handler(request: Request, exc: Exception):
              content={
                  "code": 500,
                  "message": "服务器内部错误",
+                 "data": error_data
+             }
+         )
+
+
+# 参数字段名 -> 中文提示
+FIELD_LABELS = {
+    "username": "用户名",
+    "password": "密码",
+    "oldPassword": "原密码",
+    "newPassword": "新密码",
+    "categoryId": "分类 ID",
+    "conversationId": "会话 ID",
+    "newsId": "新闻 ID",
+    "pageSize": "每页数量",
+}
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+         """
+         处理请求参数校验失败（Pydantic 422）
+
+         默认返回是英文的嵌套结构，这里转成一句能直接展示给用户的中文提示。
+         """
+         errors = exc.errors()
+         first = errors[0] if errors else {}
+         # loc 形如 ('body', 'password')，去掉 body/query 这类位置标记
+         parts = [str(p) for p in first.get("loc", []) if p not in ("body", "query", "path")]
+         field = parts[-1] if parts else "参数"
+         label = FIELD_LABELS.get(field, field)
+         ctx = first.get("ctx", {}) or {}
+         error_type = first.get("type", "")
+
+         if error_type == "string_too_short":
+             detail = f"{label}长度不能少于 {ctx.get('min_length')} 个字符"
+         elif error_type == "string_too_long":
+             detail = f"{label}长度不能超过 {ctx.get('max_length')} 个字符"
+         elif error_type == "missing":
+             detail = f"缺少必填项：{label}"
+         elif error_type in ("int_parsing", "bool_parsing", "float_parsing"):
+             detail = f"{label}格式不正确"
+         else:
+             detail = f"{label}填写有误，请检查后重试"
+
+         error_data = {"errors": errors} if DEBUG_MODE else None
+         return JSONResponse(
+             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+             content={
+                 "code": 422,
+                 "message": detail,
                  "data": error_data
              }
          )

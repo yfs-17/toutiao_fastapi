@@ -6,6 +6,7 @@ from starlette import status
 from schemas.favorite import FavoriteCheckResponse, FavoriteAdd, FavoriteListResponse
 from utils.response import success_response
 from crud import favorite
+from cache import favorite_cache
 from config.db_config import get_db
 from models.users import User
 from utils.auth import get_current_user
@@ -29,6 +30,7 @@ async def add_favorite(
         user: User = Depends(get_current_user)
 ):
     favorite_data = await favorite.add_favorite(db, user.id,favorite_add.news_id)
+    await favorite_cache.invalidate(user.id)
     return success_response(message="添加收藏成功",data=favorite_data)
 
 @router.delete("/remove")
@@ -40,6 +42,7 @@ async def remove_favorite(
     result = await favorite.delete_favorite(db, user.id, news_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="取消收藏失败")
+    await favorite_cache.invalidate(user.id)
     return success_response(message="取消收藏成功")
 
 @router.get("/list")
@@ -49,6 +52,10 @@ async def list_favorite(
         db: AsyncSession = Depends(get_db),
         user: User = Depends(get_current_user)
 ):
+    version = await favorite_cache.get_version(user.id)
+    cached = await favorite_cache.get_cache_list(user.id, version, page, page_size)
+    if cached is not None:
+        return success_response(message="收藏新闻列表获取成功", data=cached)
     row,total = await favorite.get_favorite_list(db, user.id, page, page_size)
     favorite_list = [{
         **news.__dict__,
@@ -57,6 +64,7 @@ async def list_favorite(
     } for news,favorite_time,favorite_id in row]
     has_more = total > page * page_size
     data = FavoriteListResponse(list = favorite_list,total=total,hasMore = has_more )
+    await favorite_cache.set_cache_list(user.id, version, page, page_size, data.model_dump(by_alias=True, mode="json"))
     return success_response(message="收藏新闻列表获取成功",data=data)
 
 @router.delete("/clear")
@@ -65,4 +73,5 @@ async def clear_favorite(
         user: User = Depends(get_current_user)
 ):
     count = await favorite.clear_favorite(db, user.id)
+    await favorite_cache.invalidate(user.id)
     return success_response(f"成功清除{count}收藏记录")

@@ -6,15 +6,19 @@ import redis.asyncio as redis
 
 REDIS_HOST = "127.0.0.1"
 REDIS_PORT = 6379
-REDIS_DB = 0
+REDIS_DB = 1
 
 
-redis_client = redis.Redis(
+pool = redis.ConnectionPool(
     host=REDIS_HOST,
     port=REDIS_PORT,
     db=REDIS_DB,
-    decode_responses=True
+    decode_responses=True,
+    max_connections=20
 )
+
+
+redis_client = redis.Redis(connection_pool=pool)
 
 async def get_cache(key: str):
     try:
@@ -41,3 +45,10 @@ async def set_cache(key: str,value: Any,expire: int = 3600):
     except Exception as e:
         print(f"设置缓存失败,{e}")
         return False
+
+async def incr_cache(key: str, amount: int = 1):
+    try:
+        return await redis_client.incr(key, amount)
+    except Exception as e:
+        print(f"自增缓存失败,{e}")
+        return None

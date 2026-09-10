@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import request from '../../utils/request';
 import { useUserStore } from '../user';
-import { apiConfig } from '../../config/api';
 
 export const useFavoriteStore = defineStore('favorite', {
   state: () => ({
@@ -32,7 +31,7 @@ export const useFavoriteStore = defineStore('favorite', {
       
         try {
           this.loading = true;
-          const response = await axios.get(`${apiConfig.baseURL}/api/favorite/check`, { 
+          const response = await request.get(`/api/favorite/check`, { 
             headers: { 
               Authorization: userStore.token 
             },
@@ -72,7 +71,7 @@ export const useFavoriteStore = defineStore('favorite', {
       
       try {
         this.loading = true;
-        const response = await axios.post(`${apiConfig.baseURL}/api/favorite/add`, 
+        const response = await request.post(`/api/favorite/add`, 
           { newsId },
           { 
             headers: { 
@@ -105,7 +104,7 @@ export const useFavoriteStore = defineStore('favorite', {
       
       try {
         this.loading = true;
-        const response = await axios.delete(`${apiConfig.baseURL}/api/favorite/remove?newsId=${newsId}`, { 
+        const response = await request.delete(`/api/favorite/remove?newsId=${newsId}`, { 
           headers: { 
             Authorization: userStore.token 
           }
@@ -192,7 +191,7 @@ export const useFavoriteStore = defineStore('favorite', {
       
       try {
         this.loading = true;
-        const response = await axios.delete(`${apiConfig.baseURL}/api/favorite/clear`, { 
+        const response = await request.delete(`/api/favorite/clear`, { 
           headers: { 
             Authorization: userStore.token 
           }
@@ -243,8 +242,8 @@ export const useFavoriteStore = defineStore('favorite', {
       
       try {
         this.loading = true;
-        console.log('准备发送API请求', `${apiConfig.baseURL}/api/favorite/list`);
-        const response = await axios.get(`${apiConfig.baseURL}/api/favorite/list`, { 
+        console.log('准备发送API请求', `/api/favorite/list`);
+        const response = await request.get(`/api/favorite/list`, { 
           headers: { 
             Authorization: userStore.token 
           },

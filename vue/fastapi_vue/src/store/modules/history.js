@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import request from '../../utils/request';
 import { useUserStore } from '../user';
-import { apiConfig } from '../../config/api';
 
 export const useHistoryStore = defineStore('history', {
   state: () => ({
@@ -23,7 +22,7 @@ export const useHistoryStore = defineStore('history', {
       }
       
       try {
-        const response = await axios.post(`${apiConfig.baseURL}/api/history/add`, 
+        const response = await request.post(`/api/history/add`, 
           { newsId },
           { 
             headers: { 
@@ -87,7 +86,7 @@ export const useHistoryStore = defineStore('history', {
       
       try {
         console.log('清空浏览历史API：开始请求');
-        const response = await axios.delete(`${apiConfig.baseURL}/api/history/clear`, { 
+        const response = await request.delete(`/api/history/clear`, { 
           headers: { 
             Authorization: userStore.token 
           } 
@@ -127,7 +126,7 @@ export const useHistoryStore = defineStore('history', {
       
       try {
         console.log('删除浏览历史API：开始请求', id);
-        const response = await axios.delete(`${apiConfig.baseURL}/api/history/delete/${id}`, { 
+        const response = await request.delete(`/api/history/delete/${id}`, { 
           headers: { 
             Authorization: userStore.token 
           } 
@@ -173,7 +172,7 @@ export const useHistoryStore = defineStore('history', {
       
       try {
         console.log('获取浏览历史API：开始请求');
-        const response = await axios.get(`${apiConfig.baseURL}/api/history/list`, { 
+        const response = await request.get(`/api/history/list`, { 
           headers: { 
             Authorization: userStore.token 
           } 

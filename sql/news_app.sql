@@ -18,20 +18,20 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ----------------------------
--- Table structure for ai_chat
+-- Table structure for ai_conversation
 -- ----------------------------
-DROP TABLE IF EXISTS `ai_chat`;
-CREATE TABLE `ai_chat`  (
-  `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '聊天记录ID',
+DROP TABLE IF EXISTS `ai_conversation`;
+CREATE TABLE `ai_conversation`  (
+  `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '会话ID',
   `user_id` int UNSIGNED NOT NULL COMMENT '用户ID',
-  `message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '用户消息',
-  `response` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'AI回复',
+  `title` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL DEFAULT '新对话' COMMENT '会话标题',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `fk_ai_chat_user_idx`(`user_id` ASC) USING BTREE,
-  INDEX `idx_created_at`(`created_at` DESC) USING BTREE,
-  CONSTRAINT `fk_ai_chat_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'AI聊天记录表' ROW_FORMAT = Dynamic;
+  INDEX `fk_ai_conversation_user_idx`(`user_id` ASC) USING BTREE,
+  INDEX `idx_ai_conversation_updated`(`updated_at` DESC) USING BTREE,
+  CONSTRAINT `fk_ai_conversation_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'AI会话表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for favorite
