@@ -1,5 +1,5 @@
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import update
 
@@ -85,3 +85,16 @@ async def get_related_news(db: AsyncSession, category_id: int, news_id: int,limi
         "categoryId": news_detail.category_id,
         "views": news_detail.views,
     } for news_detail in related_news]
+
+
+# 按关键词搜索新闻，匹配标题或简介
+async def search_news(db: AsyncSession, keyword: str, limit: int = 10):
+    pattern = f"%{keyword}%"
+    stmt = (
+        select(News)
+        .where(or_(News.title.like(pattern), News.description.like(pattern)))
+        .order_by(News.views.desc(), News.publish_time.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

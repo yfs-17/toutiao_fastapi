@@ -1,25 +1,88 @@
 <template>
   <div class="ai-chat-container">
-    <van-nav-bar title="AI问答" fixed />
-    
+    <van-nav-bar title="AI问答" fixed>
+      <template #right>
+        <van-icon name="wap-nav" size="20" @click="openSessions" />
+      </template>
+    </van-nav-bar>
+
+    <!-- 会话列表抽屉 -->
+    <van-popup
+      v-model:show="showSessions"
+      position="left"
+      :style="{ width: '78%', height: '100%' }"
+    >
+      <div class="session-panel">
+        <div class="session-header">
+          <span>对话记录</span>
+          <van-icon name="cross" @click="showSessions = false" />
+        </div>
+        <van-button
+          block
+          type="primary"
+          icon="plus"
+          size="small"
+          :disabled="streaming"
+          @click="onNewSession"
+        >
+          新建对话
+        </van-button>
+        <div class="session-list">
+          <div
+            v-for="item in conversations"
+            :key="item.id"
+            :class="['session-item', { active: item.id === currentId }]"
+            @click="onSelectSession(item.id)"
+          >
+            <span class="session-title">{{ item.title }}</span>
+            <van-icon name="delete-o" class="session-del" @click.stop="onDeleteSession(item)" />
+          </div>
+          <van-empty v-if="!conversations.length" description="还没有对话" />
+        </div>
+      </div>
+    </van-popup>
+
     <div class="chat-content">
       <div class="messages-container" ref="messagesContainer">
-        <div 
-          v-for="(message, index) in messages" 
-          :key="index" 
-          :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']"
+        <div v-if="!messages.length" class="welcome">
+          <p>你好，我是新闻助手。</p>
+          <p>可以帮你查新闻、搜关键词、管理收藏和浏览历史。</p>
+          <p>试试问我："有哪些新闻分类？"</p>
+        </div>
+
+        <div
+          v-for="(message, index) in messages"
+          :key="index"
+          :class="['message', message.role === 'user' ? 'user-message' : 'ai-message',
+                   { 'has-cards': message.cards && message.cards.length }]"
         >
           <div class="message-content">
-            <div v-if="message.role === 'assistant' && message.content === ''" class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+            <div
+              v-if="message.role === 'assistant' && message.content === '' && streaming && index === messages.length - 1"
+              class="typing-indicator"
+            >
+              <span></span><span></span><span></span>
             </div>
             <div v-else v-html="formatMessage(message.content)"></div>
           </div>
+          <div v-if="message.cards && message.cards.length" class="news-cards">
+            <news-item v-for="item in message.cards" :key="item.id" :news="item" />
+          </div>
+        </div>
+
+        <div v-if="statusText" class="status-hint">{{ statusText }}</div>
+
+        <div v-if="pendingInterrupt" class="confirm-card">
+          <div class="confirm-text">{{ pendingInterrupt.question }}</div>
+          <div class="confirm-actions">
+            <van-button size="small" :disabled="streaming" @click="onAnswer(false)">取消</van-button>
+            <van-button size="small" type="danger" :disabled="streaming" @click="onAnswer(true)">
+              确认
+            </van-button>
+          </div>
         </div>
       </div>
-      
+
       <div class="input-container">
         <van-field
           v-model="userInput"
@@ -28,177 +91,127 @@
           type="textarea"
           placeholder="请输入问题..."
           class="chat-input"
+          :disabled="streaming || !!pendingInterrupt"
           @keypress.enter.prevent="sendMessage"
         />
-        <van-button 
-          type="primary" 
-          class="send-button" 
-          :disabled="isLoading || !userInput.trim()" 
+        <van-button
+          type="primary"
+          class="send-button"
+          :disabled="streaming || !!pendingInterrupt || !userInput.trim()"
           @click="sendMessage"
         >
           发送
         </van-button>
       </div>
     </div>
-    
+
     <tab-bar />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue';
-import TabBar from '../components/TabBar.vue';
-import { showToast } from 'vant';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { showToast, showDialog } from 'vant';
 import * as marked from 'marked';
 import DOMPurify from 'dompurify';
-import { aiChatConfig } from '../config/api';
+import TabBar from '../components/TabBar.vue';
+import NewsItem from '../components/NewsItem.vue';
+import { useChatStore } from '../store/modules/chat';
+import { useUserStore } from '../store/user';
 
-// 聊天消息
-const messages = ref([
-  { role: 'assistant', content: '你好！我是AI助手，有什么可以帮助你的吗？' }
-]);
+const router = useRouter();
+const chatStore = useChatStore();
+const userStore = useUserStore();
+
 const userInput = ref('');
+const showSessions = ref(false);
 const messagesContainer = ref(null);
-const isLoading = ref(false);
 
-// 从配置文件获取API设置
-const apiEndpoint = ref(aiChatConfig.apiEndpoint);
-const apiKey = ref(aiChatConfig.apiKey);
-const model = ref(aiChatConfig.model);
+const messages = computed(() => chatStore.messages);
+const conversations = computed(() => chatStore.conversations);
+const currentId = computed(() => chatStore.currentId);
+const streaming = computed(() => chatStore.streaming);
+const statusText = computed(() => chatStore.statusText);
+const pendingInterrupt = computed(() => chatStore.pendingInterrupt);
 
-// 格式化消息内容（支持Markdown）
 const formatMessage = (content) => {
   if (!content) return '';
-  // 使用marked解析Markdown，并用DOMPurify清理HTML
   return DOMPurify.sanitize(marked.parse(content));
 };
 
-// 发送消息
-const sendMessage = async () => {
-  if (!userInput.value.trim() || isLoading.value) return;
-  
-  // 检查API设置
-  if (!apiKey.value || apiKey.value === 'your-api-key-here') {
-    showToast('API Key未配置，请联系管理员');
-    return;
-  }
-  
-  // 添加用户消息
-  const userMessage = userInput.value.trim();
-  messages.value.push({ role: 'user', content: userMessage });
-  userInput.value = '';
-  
-  // 添加AI消息占位
-  messages.value.push({ role: 'assistant', content: '' });
-  
-  // 滚动到底部
-  await nextTick();
-  scrollToBottom();
-  
-  // 发送请求
-  isLoading.value = true;
-  try {
-    await fetchAIResponse(userMessage);
-  } catch (error) {
-    console.error('Error fetching AI response:', error);
-    // 更新最后一条消息为错误信息
-    messages.value[messages.value.length - 1].content = `发生错误: ${error.message || '请检查网络连接和API设置'}`;
-  } finally {
-    isLoading.value = false;
-    await nextTick();
-    scrollToBottom();
-  }
-};
-
-// 获取AI响应（使用SSE）
-const fetchAIResponse = async (userMessage) => {
-  const allMessages = messages.value
-    .slice(0, -1) // 排除最后一个空的assistant消息
-    .map(msg => ({ role: msg.role, content: msg.content }));
-  
-  try {
-    const response = await fetch(apiEndpoint.value, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.value}`,
-        'X-DashScope-SSE': 'enable' // 添加阿里云DashScope所需的SSE头
-      },
-      body: JSON.stringify({
-        model: model.value,
-        messages: allMessages,
-        stream: true
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.error?.message || `HTTP error! status: ${response.status}`);
-    }
-    
-    // 处理SSE流
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let aiResponse = '';
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-        
-        try {
-          const json = JSON.parse(data);
-          // 适配阿里云DashScope的返回格式
-          const content = json.choices?.[0]?.delta?.content || 
-                         json.output?.text || 
-                         json.choices?.[0]?.message?.content || '';
-          if (content) {
-            aiResponse += content;
-            // 更新最后一条消息
-            messages.value[messages.value.length - 1].content = aiResponse;
-            await nextTick();
-            scrollToBottom();
-          }
-        } catch (e) {
-          console.error('Error parsing SSE data:', e);
-        }
-      }
-    }
-  }
-  
-  // 如果没有收到任何内容
-  if (!aiResponse) {
-    messages.value[messages.value.length - 1].content = '抱歉，我无法生成回复。请检查API设置或稍后再试。';
-  }
-  } catch (error) {
-    console.error('Fetch error:', error);
-    throw error;
-  }
-};
-
-// 滚动到底部
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
 
-// 监听消息变化，自动滚动
-watch(messages, () => {
-  nextTick(scrollToBottom);
-}, { deep: true });
+const sendMessage = async () => {
+  const text = userInput.value.trim();
+  if (!text || streaming.value || pendingInterrupt.value) return;
+  userInput.value = '';
+  await chatStore.sendMessage(text);
+};
 
-// 组件挂载时滚动到底部
-onMounted(() => {
+const onAnswer = async (confirmed) => {
+  await chatStore.answerInterrupt(confirmed);
+};
+
+const openSessions = () => {
+  showSessions.value = true;
+};
+
+const onNewSession = async () => {
+  if (streaming.value) return;
+  showSessions.value = false;
+  try {
+    await chatStore.createConversation();
+  } catch (error) {
+    showToast('新建对话失败');
+  }
+};
+
+const onSelectSession = async (id) => {
+  if (id === currentId.value || streaming.value) {
+    showSessions.value = false;
+    return;
+  }
+  showSessions.value = false;
+  await chatStore.openConversation(id);
+};
+
+const onDeleteSession = async (item) => {
+  try {
+    await showDialog({
+      title: '删除对话',
+      message: `确定删除「${item.title}」吗？删除后无法恢复。`,
+      showCancelButton: true,
+    });
+  } catch {
+    return;
+  }
+  try {
+    await chatStore.deleteConversation(item.id);
+    showToast('已删除');
+  } catch (error) {
+    showToast('删除失败');
+  }
+};
+
+watch(messages, () => nextTick(scrollToBottom), { deep: true });
+watch(statusText, () => nextTick(scrollToBottom));
+watch(pendingInterrupt, () => nextTick(scrollToBottom));
+
+onMounted(async () => {
+  if (!userStore.getLoginStatus) {
+    showToast('请先登录');
+    router.replace('/login');
+    return;
+  }
+  await chatStore.loadConversations();
+  if (chatStore.conversations.length) {
+    await chatStore.openConversation(chatStore.conversations[0].id);
+  }
   scrollToBottom();
 });
 </script>
@@ -226,9 +239,20 @@ onMounted(() => {
   padding: 10px;
 }
 
+.welcome {
+  color: #969799;
+  font-size: 14px;
+  line-height: 1.9;
+  padding: 20px 6px;
+}
+
+.welcome p {
+  margin: 4px 0;
+}
+
 .message {
   margin-bottom: 10px;
-  max-width: 80%;
+  max-width: 82%;
 }
 
 .user-message {
@@ -243,6 +267,8 @@ onMounted(() => {
   padding: 10px;
   border-radius: 10px;
   word-break: break-word;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .user-message .message-content {
@@ -253,6 +279,51 @@ onMounted(() => {
 .ai-message .message-content {
   background-color: #f2f2f2;
   color: #333;
+}
+
+/* 带新闻卡片的消息占满整行 */
+.message.has-cards {
+  max-width: 100%;
+  width: 100%;
+}
+
+.news-cards {
+  margin-top: 8px;
+  border: 1px solid #ececec;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.news-cards :deep(.news-item:last-child) {
+  border-bottom: none;
+}
+
+.status-hint {
+  font-size: 12px;
+  color: #969799;
+  padding: 2px 6px 8px;
+}
+
+.confirm-card {
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 6px 0 12px;
+}
+
+.confirm-text {
+  font-size: 14px;
+  color: #874d00;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .input-container {
@@ -271,22 +342,57 @@ onMounted(() => {
   align-self: flex-end;
 }
 
-/* Markdown 样式 */
-.message-content pre {
-  background-color: #f8f8f8;
-  padding: 10px;
-  border-radius: 5px;
-  overflow-x: auto;
+/* 会话抽屉 */
+.session-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
-.message-content code {
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 2px 4px;
-  border-radius: 3px;
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
 }
 
-.message-content img {
-  max-width: 100%;
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 10px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #323233;
+  margin-bottom: 4px;
+}
+
+.session-item.active {
+  background-color: #e8f3ff;
+  color: #1989fa;
+}
+
+.session-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.session-del {
+  color: #c8c9cc;
+  padding: 4px;
 }
 
 /* 打字指示器 */
@@ -322,7 +428,7 @@ onMounted(() => {
   }
 }
 
-/* Markdown样式 */
+/* Markdown 样式 */
 :deep(pre) {
   background-color: #f0f0f0;
   padding: 10px;

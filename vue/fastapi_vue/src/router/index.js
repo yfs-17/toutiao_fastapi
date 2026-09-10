@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { showToast } from 'vant'
+import { useUserStore } from '../store/user'
 
 const routes = [
   {
@@ -111,13 +113,22 @@ const router = createRouter({
   routes
 })
 
-// 全局前置守卫
+// 无需登录就能访问的页面
+const PUBLIC_PATHS = ['/home', '/login', '/register']
+
+// 全局前置守卫：未登录只能浏览首页，点其它页面一律引导去登录
 router.beforeEach((to, from, next) => {
-  // 设置页面标题
   document.title = to.meta.title || '新闻资讯'
-  
-  // 直接允许访问所有页面
-  next()
+
+  const userStore = useUserStore()
+  const isPublic = PUBLIC_PATHS.some((path) => to.path.startsWith(path))
+
+  if (isPublic || userStore.getLoginStatus) {
+    next()
+    return
+  }
+  showToast('请先登录')
+  next('/login')
 })
 
 export default router
