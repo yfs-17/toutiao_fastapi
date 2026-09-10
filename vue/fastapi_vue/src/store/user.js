@@ -133,14 +133,9 @@ export const useUserStore = defineStore('user', {
     }
   },
 
-  // 添加持久化配置
+  // 持久化配置（pinia-plugin-persistedstate v4 语法）
   persist: {
-    enabled: true,
-    strategies: [
-      {
-        key: 'user-store',
-        storage: localStorage
-      }
-    ]
+    key: 'user-store',
+    storage: localStorage
   }
 });

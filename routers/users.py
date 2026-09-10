@@ -67,8 +67,10 @@ async def update_user_password(
 
 @router.post("/logout")
 async def logout(
-        authorization: str = Header(...,alias="Authorization"),
+        authorization: str = Header(None,alias="Authorization"),
         db: AsyncSession = Depends(get_db)
 ):
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="未登录")
     await users.delete_token(db, parse_token(authorization))
     return success_response("已退出登录")

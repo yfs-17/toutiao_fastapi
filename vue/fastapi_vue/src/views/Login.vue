@@ -42,18 +42,13 @@
             登录
           </van-button>
         </div>
-        
-        <div class="login-tips">
-          <p>测试账号：admin</p>
-          <p>测试密码：123456</p>
-        </div>
       </van-form>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import { useUserStore } from '../store/user';
@@ -63,6 +58,14 @@ const userStore = useUserStore();
 
 const username = ref('');
 const password = ref('');
+
+onMounted(() => {
+  // 因登录态失效被重定向过来的，给个明确提示
+  if (sessionStorage.getItem('authExpired')) {
+    sessionStorage.removeItem('authExpired');
+    showToast('登录已过期，请重新登录');
+  }
+});
 
 const onSubmit = async (values) => {
   // 显示加载提示

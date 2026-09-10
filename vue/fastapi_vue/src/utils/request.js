@@ -1,29 +1,22 @@
 import axios from 'axios';
 import { apiConfig } from '../config/api';
-
-// 与 store/user.js 里 persist 配置的 key 保持一致
-const USER_STORE_KEY = 'user-store';
-
-// 从持久化的登录态里取 token，避免和 store 形成循环依赖
-function readToken() {
-  try {
-    const raw = localStorage.getItem(USER_STORE_KEY);
-    return raw ? JSON.parse(raw).token || '' : '';
-  } catch (error) {
-    return '';
-  }
-}
+import { useUserStore } from '../store/user';
 
 const request = axios.create({
   baseURL: apiConfig.baseURL,
   timeout: 30000,
 });
 
-// 自动带上 token，调用方不用再手写 headers
+// 自动带上 token，调用方不用再手写 headers。
+// 直接读 pinia store，不依赖持久化插件的存储 key 和格式。
 request.interceptors.request.use((config) => {
-  const token = readToken();
-  if (token) {
-    config.headers.Authorization = token;
+  try {
+    const token = useUserStore().token;
+    if (token) {
+      config.headers.Authorization = token;
+    }
+  } catch (error) {
+    // pinia 尚未就绪时忽略
   }
   return config;
 });
@@ -32,9 +25,19 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem(USER_STORE_KEY);
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+    // 登录接口自身的 401 表示账号密码错误，不能当成登录态失效
+    const isAuthEntry = url.includes('/api/user/login');
+
+    if (status === 401 && !isAuthEntry) {
+      try {
+        useUserStore().$reset();
+      } catch (e) {
+        // pinia 尚未就绪时忽略
+      }
       if (!window.location.pathname.startsWith('/login')) {
+        sessionStorage.setItem('authExpired', '1');
         window.location.href = '/login';
       }
     }

@@ -15,9 +15,12 @@ def parse_token(authorization: str) -> str:
 
 
 async def get_current_user(
-        authorization: str = Header(...,alias="Authorization"),
+        authorization: str = Header(None,alias="Authorization"),
         db: AsyncSession = Depends(get_db)
 ):
+    # 没带令牌时返回 401（而不是参数校验的 422），前端才能据此判断登录失效
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="未登录")
     user = await users.get_user_token(db, parse_token(authorization))
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="无效令牌")

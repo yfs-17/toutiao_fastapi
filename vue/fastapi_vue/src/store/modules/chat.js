@@ -150,7 +150,7 @@ export const useChatStore = defineStore('chat', {
           body: JSON.stringify(body),
         });
         if (response.status === 401) {
-          localStorage.removeItem('user-store');
+          useUserStore().$reset();
           window.location.href = '/login';
           throw new Error('登录已失效');
         }
